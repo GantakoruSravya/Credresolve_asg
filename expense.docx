@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SplitEase - Expense Sharing App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .card { @apply bg-white p-6 rounded-lg shadow-md mb-6; }
+        .btn { @apply px-4 py-2 rounded font-semibold text-white transition-colors; }
+        .btn-primary { @apply bg-blue-600 hover:bg-blue-700; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-4xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">SplitEase</h1>
+            <p class="text-gray-600">Expense Sharing System</p>
+        </header>
+
+        <div class="card">
+            <h2 class="text-xl font-bold mb-4">1. Setup Group</h2>
+            <div class="flex gap-2 mb-4">
+                <input id="userNameInput" type="text" placeholder="Enter User Name" class="border p-2 rounded flex-grow">
+                <button onclick="addUser()" class="btn btn-primary">Add User</button>
+            </div>
+            <div id="userChips" class="flex flex-wrap gap-2">
+                </div>
+        </div>
+
+        <div class="card">
+            <h2 class="text-xl font-bold mb-4">2. Add Shared Expense</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium">Description</label>
+                    <input id="expDesc" type="text" placeholder="Dinner, Rent, etc." class="w-full border p-2 rounded">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium">Total Amount ($)</label>
+                    <input id="expAmount" type="number" placeholder="0.00" class="w-full border p-2 rounded">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium">Paid By</label>
+                    <select id="paidBySelect" class="w-full border p-2 rounded"></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium">Split Type</label>
+                    <select id="splitType" onchange="toggleSplitInputs()" class="w-full border p-2 rounded">
+                        <option value="EQUAL">Equal Split</option>
+                        <option value="EXACT">Exact Amount</option>
+                        <option value="PERCENT">Percentage</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="splitInputsContainer" class="bg-gray-50 p-4 rounded mb-4 hidden">
+                <p class="text-sm font-bold mb-2">Specify details for each user:</p>
+                <div id="dynamicSplitList" class="space-y-2"></div>
+            </div>
+
+            <button onclick="addExpense()" class="btn btn-primary w-full">Add Expense</button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="card">
+                <h2 class="text-xl font-bold mb-4">Balances (Simplified)</h2>
+                <div id="balancesList" class="space-y-2 text-sm">
+                    <p class="text-gray-500 italic">No transactions yet.</p>
+                </div>
+            </div>
+            <div class="card">
+                <h2 class="text-xl font-bold mb-4">Expense History</h2>
+                <ul id="historyList" class="space-y-2 text-sm divide-y">
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let users = [];
+        let expenses = [];
+
+        function addUser() {
+            const input = document.getElementById('userNameInput');
+            const name = input.value.trim();
+            if (name && !users.includes(name)) {
+                users.push(name);
+                updateUI();
+                input.value = '';
+            }
+        }
+
+        function updateUI() {
+            // Update User Chips
+            const chipContainer = document.getElementById('userChips');
+            chipContainer.innerHTML = users.map(u => `<span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">${u}</span>`).join('');
+
+            // Update Paid By Select
+            const select = document.getElementById('paidBySelect');
+            select.innerHTML = users.map(u => `<option value="${u}">${u}</option>`).join('');
+
+            toggleSplitInputs();
+        }
+
+        function toggleSplitInputs() {
+            const type = document.getElementById('splitType').value;
+            const container = document.getElementById('splitInputsContainer');
+            const list = document.getElementById('dynamicSplitList');
+            
+            if (type === 'EQUAL' || users.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+
+            container.classList.remove('hidden');
+            list.innerHTML = users.map(u => `
+                <div class="flex items-center justify-between">
+                    <span>${u}</span>
+                    <input type="number" data-user="${u}" class="split-val border p-1 rounded w-24 text-right" placeholder="${type === 'PERCENT' ? '%' : '$'}">
+                </div>
+            `).join('');
+        }
+
+        function addExpense() {
+            const desc = document.getElementById('expDesc').value;
+            const amount = parseFloat(document.getElementById('expAmount').value);
+            const paidBy = document.getElementById('paidBySelect').value;
+            const type = document.getElementById('splitType').value;
+
+            if (!desc || isNaN(amount) || users.length === 0) return alert("Fill all fields");
+
+            let shares = {};
+            if (type === 'EQUAL') {
+                const perPerson = amount / users.length;
+                users.forEach(u => shares[u] = perPerson);
+            } else {
+                const inputs = document.querySelectorAll('.split-val');
+                let totalInput = 0;
+                inputs.forEach(i => {
+                    const val = parseFloat(i.value) || 0;
+                    shares[i.dataset.user] = type === 'PERCENT' ? (val / 100) * amount : val;
+                    totalInput += val;
+                });
+
+                // Validation
+                if (type === 'EXACT' && Math.abs(totalInput - amount) > 0.01) return alert("Total split must equal " + amount);
+                if (type === 'PERCENT' && Math.abs(totalInput - 100) > 0.01) return alert("Total percent must equal 100");
+            }
+
+            expenses.push({ desc, amount, paidBy, shares });
+            calculateBalances();
+            renderHistory();
+        }
+
+        function calculateBalances() {
+            let netBalances = {};
+            users.forEach(u => netBalances[u] = 0);
+
+            expenses.forEach(exp => {
+                // Payer gets credit
+                netBalances[exp.paidBy] += exp.amount;
+                // Everyone else (including payer) gets debited their share
+                for (let user in exp.shares) {
+                    netBalances[user] -= exp.shares[user];
+                }
+            });
+
+            // Split into Owers and Getters
+            let creditors = []; // positive balance
+            let debtors = [];   // negative balance
+
+            for (let user in netBalances) {
+                if (netBalances[user] > 0.01) creditors.push({ name: user, amt: netBalances[user] });
+                else if (netBalances[user] < -0.01) debtors.push({ name: user, amt: Math.abs(netBalances[user]) });
+            }
+
+            // Simplification Logic (Greedy Algorithm)
+            const settlementResults = [];
+            let i = 0, j = 0;
+            while (i < debtors.length && j < creditors.length) {
+                let debt = debtors[i].amt;
+                let credit = creditors[j].amt;
+                let settledAmt = Math.min(debt, credit);
+
+                settlementResults.push(`<strong>${debtors[i].name}</strong> owes <strong>${creditors[j].name}</strong>: $${settledAmt.toFixed(2)}`);
+
+                debtors[i].amt -= settledAmt;
+                creditors[j].amt -= settledAmt;
+
+                if (debtors[i].amt < 0.01) i++;
+                if (creditors[j].amt < 0.01) j++;
+            }
+
+            const balList = document.getElementById('balancesList');
+            balList.innerHTML = settlementResults.length > 0 ? settlementResults.map(s => `<div>${s}</div>`).join('') : '<p class="text-gray-500 italic">All settled up!</p>';
+        }
+
+        function renderHistory() {
+            const history = document.getElementById('historyList');
+            history.innerHTML = expenses.map(e => `
+                <li class="py-2">
+                    <span class="font-bold">${e.desc}</span>: $${e.amount} paid by <span class="text-blue-600">${e.paidBy}</span>
+                </li>
+            `).reverse().join('');
+        }
+    </script>
+</body>
+</html>
